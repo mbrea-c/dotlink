@@ -1,0 +1,2 @@
+link "./README.md" "linkToReadme"
+include "other.link"
