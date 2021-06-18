@@ -1,2 +1,2 @@
-link "./README.md" "linkToReadme"
+link "./Setup.hs" "./linkito"
 include "other.link"

@@ -1,8 +1,9 @@
 module Main where
 
 import Data.List
-import Linker
+import Evaluator
 import Parser
+import ParserUtil
 import System.Directory
 import System.Environment
 import System.IO
@@ -12,8 +13,7 @@ remainder (_, s) = s
 
 main = do
   args <- getArgs
-  progName <- getProgName
-  putStrLn "The arguments are:"
-  mapM putStrLn args
-  putStrLn "The program name is:"
-  putStrLn progName
+  if (length args == 1)
+    then do
+      eval [Include (head args)]
+    else putStrLn "Only one argument accepted"

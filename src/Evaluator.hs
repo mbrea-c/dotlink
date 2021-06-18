@@ -1,42 +1,12 @@
-module Linker where
+module Evaluator (eval) where
 
 import Data.List
 import Data.List.Split
 import Parser
+import ParserUtil
 import System.Directory
 
-data Action = Link String String | Include String deriving (Show)
-
-data CheckedAction = Verified Action | Error String
-
-type Dotlink = [Action]
-
-type CheckedDotlink = [CheckedAction]
-
-stringLit :: Parser String
-stringLit = do
-  char '"'
-  str <- many (sat (/= '"'))
-  char '"'
-  return str
-
-linkAction :: Parser Action
-linkAction = do
-  symb "link"
-  target <- token stringLit
-  linkName <- token stringLit
-  return (Link target linkName)
-
-includeAction :: Parser Action
-includeAction = do
-  symb "include"
-  target <- token stringLit
-  return (Include target)
-
-dotlink :: Parser Dotlink
-dotlink = many (linkAction +++ includeAction)
-
--------------------Impure parts-------------------------------
+data ActionResult = Success String | Failure String
 
 checkFileName :: String -> IO (Maybe String)
 checkFileName str = do
@@ -65,9 +35,16 @@ checkPathName str = do
       return (Just absPath)
     else return Nothing
 
-checkParentDir :: String -> IO (Maybe FilePath)
-checkParentDir str = do
-  isFile <- doesDirectoryExist (parentDir str)
+validLinkName :: String -> IO Bool
+validLinkName linkName = do
+  pathExists <- doesPathExist linkName
+  if pathExists
+    then pathIsSymbolicLink linkName
+    else doesDirectoryExist (parentDir linkName)
+
+checkLinkName :: String -> IO (Maybe FilePath)
+checkLinkName str = do
+  isFile <- validLinkName str
   if isFile
     then do
       absPath <- makeAbsolute str
@@ -77,12 +54,12 @@ checkParentDir str = do
 checkAction :: Action -> IO CheckedAction
 checkAction (Link target linkName) = do
   checkedTarget <- checkPathName target
-  checkedLinkName <- checkParentDir linkName
+  checkedLinkName <- checkLinkName linkName
   return
     ( case (checkedTarget, checkedLinkName) of
         (Just t, Just l) -> Verified (Link t l)
         (Nothing, _) -> Error ("Link target does not exist: " ++ target)
-        (Just _, Nothing) -> Error ("Link name has no parent directory: " ++ target)
+        (Just _, Nothing) -> Error ("Link name is not valid: " ++ target)
     )
 checkAction (Include target) = do
   checkedTarget <- checkFileName target
@@ -116,11 +93,58 @@ expandCheckedDotlink (Verified (Include target) : as) = do
   expandedRest <- expandCheckedDotlink as
   expandedInclude <- withCurrentDirectory (parentDir target) (readFile target >>= parseAndExpand)
   return (expandedInclude ++ expandedRest)
+expandCheckedDotlink (Error s : as) = do
+  expandedRest <- expandCheckedDotlink as
+  return (Error s : expandedRest)
 
---evalLink :: CheckedAction -> IO ()
---evalLink (Link target linkName) =
+evalLink :: CheckedAction -> IO ()
+evalLink (Verified (Link target linkName)) = do
+  deleteOldLink linkName
+  createNewLink target linkName
+  putStrLn ("linked " ++ linkName ++ " -------> " ++ target)
+  where
+    deleteOldLink linkName = do
+      pathExists <- doesPathExist linkName
+      if pathExists
+        then do
+          isLink <- pathIsSymbolicLink linkName
+          if isLink
+            then do
+              isFileLink <- doesFileExist linkName
+              isDirectoryLink <- doesDirectoryExist linkName
+              if isFileLink then do removeFile linkName else return ()
+              if isDirectoryLink then do removeDirectory linkName else return ()
+            else return ()
+        else return ()
+    createNewLink target linkName = do
+      isFile <- doesFileExist target
+      if isFile
+        then createFileLink target linkName
+        else createDirectoryLink target linkName
 
---TODO:executeDotlink :: CheckedDotlink -> IO ()
+isVerified :: CheckedAction -> Bool
+isVerified (Verified _) = True
+isVerified (Error _) = False
+
+mapIO :: (a -> (IO ())) -> [a] -> IO ()
+mapIO f [] = return ()
+mapIO f (a : as) = do
+  f a
+  mapIO f as
+
+printErrors :: CheckedAction -> IO ()
+printErrors (Verified _) = return ()
+printErrors (Error s) = putStrLn ("ERROR: " ++ s)
+
+evalChecked :: CheckedDotlink -> IO ()
+evalChecked [] = return ()
+evalChecked lst
+  | all isVerified lst = mapIO evalLink lst
+  | otherwise = mapIO printErrors lst
+
+eval :: Dotlink -> IO ()
+eval lst = checkDotlink lst >>= expandCheckedDotlink >>= evalChecked
+
 ----------------------utils---------------------
 
 parentDir :: FilePath -> FilePath
@@ -154,61 +178,3 @@ parentDir (x : xs)
         . drop 1
         . reverse
         . splitOn "/"
-
---------------------------------------------------------------
---------------------------------------------------------------
---------------------------------------------------------------
---------------------------------------------------------------
---------------------------------------------------------------
---------------------------------------------------------------
---------------------------------------------------------------
---------------------------------------------------------------
---------------------------------------------------------------
---------------------------------------------------------------
---------------------------------------------------------------
---------------------------------------------------------------
---------------------------------------------------------------
-
---include :: Parser ()
---include = do
---symb "include"
---fname <- fileName
---return
---( fname >>= \f ->
---readFile f >>= \fileContents ->
---withCurrentDirectory (parentDirAbs f) (return $ apply linkFile fileContents)
---)
---return ()
-
---link :: Parser ()
---link = do
---symb "link"
---iopath <- pathName
---newlink <- pathWithParentDir
-
-----envVar :: Parser String
-
---linkFile :: Parser ()
---linkFile = undefined
-
-----envSubstString :: Parser String
-
---fileName :: Parser (IO String)
---fileName = do
---str <- stringLit
---return (doesFileExist str >>= (\b -> (if b then makeAbsolute str else return [])))
-
---dirName :: Parser (IO String)
---dirName = do
---str <- stringLit
---return (doesDirectoryExist str >>= (\b -> (if b then makeAbsolute str else return [])))
-
---pathName :: Parser (IO String)
---pathName = do
---str <- stringLit
---return (doesPathExist str >>= (\b -> (if b then makeAbsolute str else return [])))
-
---pathWithParentDir :: Parser (IO String)
---pathWithParentDir = do
---str <- stringLit
---return (doesPathExist (parentDir str) >>= (\b -> (if b then makeAbsolute str else return [])))
