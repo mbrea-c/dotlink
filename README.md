@@ -21,7 +21,10 @@ link "dotfiles/Xresources.d" "$HOME/.Xresources.d"
 include "config.link"
 include "scripts.link"
 ```
-and dotlink will link all the files to their correct locations.
+and dotlink will link all the files to their correct locations by simply running:
+```
+$ dotlink user.link
+```
 
 Dotlink also performs all the operations *atomically*, it will not make any changes to your system unless it has verified that you can make *all the changes* (for example, the link names are not existing non-symbolic-link files and you have relevant permissions to create such links).
 
