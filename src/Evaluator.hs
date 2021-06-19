@@ -1,12 +1,68 @@
-module Evaluator (eval) where
+module Evaluator (eval, envSubst) where
 
 import Data.List
 import Data.List.Split
+import Data.Maybe
+import Data.Tuple
 import Parser
 import ParserUtil
 import System.Directory
+import System.Environment
 
-data ActionResult = Success String | Failure String
+data Result a = Success a | Failure String
+
+data ActionEval0 = LinkSubst String String | IncludeSubst String | LogSubst String
+
+data ActionEval1 = LinkChecked String String | IncludeChecked String | LogChecked String
+
+data ActionEval2 = LinkExpanded String String | LogExpanded String
+
+envSubst :: String -> IO String
+envSubst s = (fst . head) (parse envSubstString s)
+  where
+    envSubstString :: Parser (IO String)
+    envSubstString = manyConcatIO (substEnvVar +++ justAChar)
+    justAChar :: Parser (IO String)
+    justAChar = do
+      c <- item
+      return (return [c])
+    substEnvVar :: Parser (IO String)
+    substEnvVar = do
+      var <- environmentVariable
+      return
+        ( do
+            sub <- lookupEnv var
+            return (fromMaybe "" sub)
+        )
+
+concatIO :: [IO [a]] -> IO [a]
+concatIO [] = return []
+concatIO (x : xs) =
+  do
+    as <- concatIO xs
+    a <- x
+    return (a ++ as)
+
+manyConcatIO :: Parser (IO [a]) -> Parser (IO [a])
+manyConcatIO p = do
+  ioLst <- many p
+  return (concatIO ioLst)
+
+substAction :: Action -> IO (Result ActionEval0)
+substAction (Link target linkName) = do
+  subTarget <- envSubst target
+  subLinkName <- envSubst linkName
+  return (Success (LinkSubst subTarget subLinkName))
+substAction (Include target) = do
+  subTarget <- envSubst target
+  return (Success (IncludeSubst subTarget))
+
+subst :: Dotlink -> IO [Result ActionEval0]
+subst [] = return []
+subst (a : as) = do
+  sa <- substAction a
+  sas <- subst as
+  return (sa : sas)
 
 checkFileName :: String -> IO (Maybe String)
 checkFileName str = do
@@ -51,57 +107,61 @@ checkLinkName str = do
       return (Just absPath)
     else return Nothing
 
-checkAction :: Action -> IO CheckedAction
-checkAction (Link target linkName) = do
+checkAction :: ActionEval0 -> IO (Result ActionEval1)
+checkAction (LinkSubst target linkName) = do
   checkedTarget <- checkPathName target
   checkedLinkName <- checkLinkName linkName
   return
     ( case (checkedTarget, checkedLinkName) of
-        (Just t, Just l) -> Verified (Link t l)
-        (Nothing, _) -> Error ("Link target does not exist: " ++ target)
-        (Just _, Nothing) -> Error ("Link name is not valid: " ++ target)
+        (Just t, Just l) -> Success (LinkChecked t l)
+        (Nothing, _) -> Failure ("Link target does not exist: " ++ target)
+        (Just _, Nothing) -> Failure ("Link name is not valid: " ++ target)
     )
-checkAction (Include target) = do
+checkAction (IncludeSubst target) = do
   checkedTarget <- checkFileName target
   return
     ( case checkedTarget of
-        Just t -> Verified (Include t)
-        Nothing -> Error ("Included file does not exist: " ++ target)
+        Just t -> Success (IncludeChecked t)
+        Nothing -> Failure ("Included file does not exist: " ++ target)
     )
 
-checkDotlink :: Dotlink -> IO CheckedDotlink
-checkDotlink [] = return []
-checkDotlink (a : as) = do
+check :: [Result ActionEval0] -> IO [Result ActionEval1]
+check [] = return []
+check (Success a : as) = do
   ca <- checkAction a
-  cas <- checkDotlink as
+  cas <- check as
   return (ca : cas)
+check (Failure s : as) = do
+  cas <- check as
+  return (Failure s : cas)
 
-parseAndExpand :: String -> IO CheckedDotlink
+parseAndExpand :: String -> IO [Result ActionEval2]
 parseAndExpand str =
   let result = apply dotlink str
    in case result of
-        [] -> return [Error "Syntax error"]
-        ((dl, "") : xs) -> checkDotlink dl >>= expandCheckedDotlink
-        ((_, _) : xs) -> return [Error "Syntax error"]
+        [] -> return [Failure "Syntax error"]
+        ((dl, "") : xs) -> subst dl >>= \sub -> check sub >>= expandCheckedDotlink
+        ((_, _) : xs) -> return [Failure "Syntax error"]
 
-expandCheckedDotlink :: CheckedDotlink -> IO CheckedDotlink
+expandCheckedDotlink :: [Result ActionEval1] -> IO [Result ActionEval2]
 expandCheckedDotlink [] = return []
-expandCheckedDotlink (Verified (Link target linkName) : as) = do
+expandCheckedDotlink (Success (LinkChecked target linkName) : as) = do
   expandedRest <- expandCheckedDotlink as
-  return (Verified (Link target linkName) : expandedRest)
-expandCheckedDotlink (Verified (Include target) : as) = do
+  return (Success (LinkExpanded target linkName) : expandedRest)
+expandCheckedDotlink (Success (IncludeChecked target) : as) = do
   expandedRest <- expandCheckedDotlink as
   expandedInclude <- withCurrentDirectory (parentDir target) (readFile target >>= parseAndExpand)
-  return (expandedInclude ++ expandedRest)
-expandCheckedDotlink (Error s : as) = do
+  return (Success (LogExpanded ("including file " ++ target)) : expandedInclude ++ expandedRest)
+expandCheckedDotlink (Failure s : as) = do
   expandedRest <- expandCheckedDotlink as
-  return (Error s : expandedRest)
+  return (Failure s : expandedRest)
 
-evalLink :: CheckedAction -> IO ()
-evalLink (Verified (Link target linkName)) = do
+evalLink :: ActionEval2 -> IO (Result String)
+evalLink (LogExpanded s) = return (Success s)
+evalLink (LinkExpanded target linkName) = do
   deleteOldLink linkName
   createNewLink target linkName
-  putStrLn ("linked " ++ linkName ++ " -------> " ++ target)
+  return (Success ("linked " ++ linkName ++ " -------> " ++ target))
   where
     deleteOldLink linkName = do
       pathExists <- doesPathExist linkName
@@ -122,9 +182,9 @@ evalLink (Verified (Link target linkName)) = do
         then createFileLink target linkName
         else createDirectoryLink target linkName
 
-isVerified :: CheckedAction -> Bool
-isVerified (Verified _) = True
-isVerified (Error _) = False
+didSucceed :: Result a -> Bool
+didSucceed (Success _) = True
+didSucceed (Failure _) = False
 
 mapIO :: (a -> (IO ())) -> [a] -> IO ()
 mapIO f [] = return ()
@@ -132,18 +192,25 @@ mapIO f (a : as) = do
   f a
   mapIO f as
 
-printErrors :: CheckedAction -> IO ()
-printErrors (Verified _) = return ()
-printErrors (Error s) = putStrLn ("ERROR: " ++ s)
+printErrors :: Result a -> IO ()
+printErrors (Success _) = return ()
+printErrors (Failure s) = putStrLn ("ERROR: " ++ s)
 
-evalChecked :: CheckedDotlink -> IO ()
-evalChecked [] = return ()
-evalChecked lst
-  | all isVerified lst = mapIO evalLink lst
+printResults :: Result String -> IO ()
+printResults (Success s) = putStrLn s
+printResults (Failure s) = putStrLn ("ERROR: " ++ s)
+
+unwrapSuccess :: Result a -> a
+unwrapSuccess (Success x) = x
+
+evalExpanded :: [Result ActionEval2] -> IO ()
+evalExpanded [] = return ()
+evalExpanded lst
+  | all didSucceed lst = mapIO ((\x -> do y <- x; printResults y) . evalLink) (map unwrapSuccess lst)
   | otherwise = mapIO printErrors lst
 
 eval :: Dotlink -> IO ()
-eval lst = checkDotlink lst >>= expandCheckedDotlink >>= evalChecked
+eval lst = subst lst >>= \sub -> check sub >>= expandCheckedDotlink >>= evalExpanded
 
 ----------------------utils---------------------
 

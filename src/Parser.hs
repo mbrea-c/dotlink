@@ -1,5 +1,6 @@
 module Parser where
 
+import Data.Char
 import Data.List
 import Data.List.Split
 import ParserUtil
@@ -7,11 +8,14 @@ import System.Directory
 
 data Action = Link String String | Include String deriving (Show)
 
-data CheckedAction = Verified Action | Error String
-
 type Dotlink = [Action]
 
-type CheckedDotlink = [CheckedAction]
+environmentVariable :: Parser String
+environmentVariable = do
+  string "$"
+  many1 (sat validChar)
+  where
+    validChar c = isAlphaNum c || (c == '_')
 
 stringLit :: Parser String
 stringLit = do

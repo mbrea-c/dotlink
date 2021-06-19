@@ -1,2 +1,2 @@
-link "./Setup.hs" "./linkito"
+link "./Setup.hs" "$HOME/linkito"
 include "other.link"

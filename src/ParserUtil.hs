@@ -93,6 +93,11 @@ space ::
     String
 space = many (sat isSpace)
 
+manyConcat :: Parser [a] -> Parser [a]
+manyConcat p = do
+  lst <- many p
+  return (concat lst)
+
 token :: Parser a -> Parser a
 token p = do a <- p; space; return a
 
