@@ -4,7 +4,7 @@ Dotfiles, (i.e. configuration files) are a mess. The [XDG Base Directory Specifi
 
 If you want to version-control your configuration files, this is a problem.
 
-Using dotlink, you can not only treat you *configuration as code*, but their location in your system as well. This means you can write an *user.link* file like the following:
+Using dotlink, you can not only treat your *configuration as code*, but their location in your system as well. This means you can write an *user.link* file like the following:
 ```
 # You can specify which files to link where
 link "dotfiles/xinitrc" "$HOME/.xinitrc"
