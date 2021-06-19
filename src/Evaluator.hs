@@ -107,23 +107,49 @@ checkLinkName str = do
       return (Just absPath)
     else return Nothing
 
-checkAction :: ActionEval0 -> IO (Result ActionEval1)
-checkAction (LinkSubst target linkName) = do
+checkActionExist :: ActionEval0 -> IO (Result ActionEval1)
+checkActionExist (LinkSubst target linkName) = do
   checkedTarget <- checkPathName target
   checkedLinkName <- checkLinkName linkName
   return
     ( case (checkedTarget, checkedLinkName) of
         (Just t, Just l) -> Success (LinkChecked t l)
         (Nothing, _) -> Failure ("Link target does not exist: " ++ target)
-        (Just _, Nothing) -> Failure ("Link name is not valid: " ++ target)
+        (Just _, Nothing) -> Failure ("Link name is not valid: " ++ linkName)
     )
-checkAction (IncludeSubst target) = do
+checkActionExist (IncludeSubst target) = do
   checkedTarget <- checkFileName target
   return
     ( case checkedTarget of
         Just t -> Success (IncludeChecked t)
         Nothing -> Failure ("Included file does not exist: " ++ target)
     )
+
+validLinkPermissions :: String -> IO Bool
+validLinkPermissions linkName = do
+  linkPermissions <- getPermissions (parentDir linkName)
+  return (writable linkPermissions)
+
+validIncludePermissions :: String -> IO Bool
+validIncludePermissions target = do
+  permissions <- getPermissions target
+  return (readable permissions)
+
+checkActionPermissions :: Result ActionEval1 -> IO (Result ActionEval1)
+checkActionPermissions (Success a@(LinkChecked target linkName)) = do
+  linkPermissions <- validLinkPermissions linkName
+  if linkPermissions
+    then return (Success a)
+    else return (Failure ("No write permissions in folder: " ++ parentDir linkName))
+checkActionPermissions (Success a@(IncludeChecked target)) = do
+  permissions <- validIncludePermissions target
+  if permissions
+    then return (Success a)
+    else return (Failure ("No read permissions for file: " ++ target))
+checkActionPermissions (Failure s) = return (Failure s)
+
+checkAction :: ActionEval0 -> IO (Result ActionEval1)
+checkAction a = checkActionExist a >>= checkActionPermissions
 
 check :: [Result ActionEval0] -> IO [Result ActionEval1]
 check [] = return []
@@ -173,7 +199,7 @@ evalLink (LinkExpanded target linkName) = do
               isFileLink <- doesFileExist linkName
               isDirectoryLink <- doesDirectoryExist linkName
               if isFileLink then do removeFile linkName else return ()
-              if isDirectoryLink then do removeDirectory linkName else return ()
+              if isDirectoryLink then do removeDirectoryLink linkName else return ()
             else return ()
         else return ()
     createNewLink target linkName = do

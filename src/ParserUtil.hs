@@ -88,10 +88,11 @@ p `chainl1` op = do a <- p; rest a
       )
         +++ return a
 
-space ::
-  Parser
-    String
+space :: Parser String
 space = many (sat isSpace)
+
+spaceLine :: Parser String
+spaceLine = many (sat (\c -> isSpace c && (c /= '\n')))
 
 manyConcat :: Parser [a] -> Parser [a]
 manyConcat p = do
@@ -100,6 +101,9 @@ manyConcat p = do
 
 token :: Parser a -> Parser a
 token p = do a <- p; space; return a
+
+tokenLine :: Parser a -> Parser a
+tokenLine p = do a <- p; spaceLine; return a
 
 symb :: String -> Parser String
 symb cs = token (string cs)

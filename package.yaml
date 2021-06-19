@@ -28,7 +28,7 @@ library:
   source-dirs: src
 
 executables:
-  dotlink-exe:
+  dotlink:
     main:                Main.hs
     source-dirs:         app
     ghc-options:
