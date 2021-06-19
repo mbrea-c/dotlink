@@ -220,11 +220,11 @@ mapIO f (a : as) = do
 
 printErrors :: Result a -> IO ()
 printErrors (Success _) = return ()
-printErrors (Failure s) = putStrLn ("ERROR: " ++ s)
+printErrors (Failure s) = putStrLn ("   ERROR: " ++ s)
 
 printResults :: Result String -> IO ()
 printResults (Success s) = putStrLn s
-printResults (Failure s) = putStrLn ("ERROR: " ++ s)
+printResults (Failure s) = putStrLn ("   ERROR: " ++ s)
 
 unwrapSuccess :: Result a -> a
 unwrapSuccess (Success x) = x
@@ -233,7 +233,10 @@ evalExpanded :: [Result ActionEval2] -> IO ()
 evalExpanded [] = return ()
 evalExpanded lst
   | all didSucceed lst = mapIO ((\x -> do y <- x; printResults y) . evalLink) (map unwrapSuccess lst)
-  | otherwise = mapIO printErrors lst
+  | otherwise = do
+    putStrLn "The following errors were found:"
+    mapIO printErrors lst
+    putStrLn "No changes were made"
 
 eval :: Dotlink -> IO ()
 eval lst = subst lst >>= \sub -> check sub >>= expandCheckedDotlink >>= evalExpanded
