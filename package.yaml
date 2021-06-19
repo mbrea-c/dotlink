@@ -23,9 +23,14 @@ dependencies:
 - base >= 4.7 && < 5
 - directory
 - split
+- ansi-terminal
 
 library:
-  source-dirs: src
+  source-dirs: 
+    - src
+    - src/util
+    - src/parser
+    - src/evaluator
 
 executables:
   dotlink:

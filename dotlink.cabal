@@ -25,15 +25,25 @@ source-repository head
 
 library
   exposed-modules:
-      Evaluator
-      Parser
       ParserUtil
+      PrintUtil
+      SystemUtil
+      Parser
+      Check
+      EvalTypes
+      Evaluator
+      Expand
+      Subst
   other-modules:
       Paths_dotlink
   hs-source-dirs:
       src
+      src/util
+      src/parser
+      src/evaluator
   build-depends:
-      base >=4.7 && <5
+      ansi-terminal
+    , base >=4.7 && <5
     , directory
     , split
   default-language: Haskell2010
@@ -46,7 +56,8 @@ executable dotlink
       app
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      ansi-terminal
+    , base >=4.7 && <5
     , directory
     , dotlink
     , split
@@ -61,7 +72,8 @@ test-suite dotlink-test
       test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      ansi-terminal
+    , base >=4.7 && <5
     , directory
     , dotlink
     , split
