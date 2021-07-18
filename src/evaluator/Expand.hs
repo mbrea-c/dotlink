@@ -21,6 +21,9 @@ expand [] = return []
 expand (Success (LinkChecked target linkName) : as) = do
   expandedRest <- expand as
   return (Success (LinkExpanded target linkName) : expandedRest)
+expand (Success (CopyChecked from to) : as) = do
+  expandedRest <- expand as
+  return (Success (CopyExpanded from to) : expandedRest)
 expand (Success (IncludeChecked target) : as) = do
   expandedRest <- expand as
   expandedInclude <- withCurrentDirectory (parentDir target) (readFile target >>= parseAndExpand)

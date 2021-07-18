@@ -45,6 +45,7 @@ library
       ansi-terminal
     , base >=4.7 && <5
     , directory
+    , process
     , split
   default-language: Haskell2010
 
@@ -60,6 +61,7 @@ executable dotlink
     , base >=4.7 && <5
     , directory
     , dotlink
+    , process
     , split
   default-language: Haskell2010
 
@@ -76,5 +78,6 @@ test-suite dotlink-test
     , base >=4.7 && <5
     , directory
     , dotlink
+    , process
     , split
   default-language: Haskell2010

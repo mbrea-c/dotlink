@@ -7,6 +7,7 @@ import Expand
 import Parser
 import ParserUtil
 import PrintUtil
+import SystemUtil
 import Subst
 import System.Console.ANSI
 import System.Directory
@@ -36,6 +37,9 @@ evalLink (LinkExpanded target linkName) = do
       if isFile
         then createFileLink target linkName
         else createDirectoryLink target linkName
+evalLink (CopyExpanded from to) = do
+  copyDir from to
+  return (Success ("copied " ++ from ++ " -------> " ++ to))
 
 didSucceed :: Result a -> Bool
 didSucceed (Success _) = True

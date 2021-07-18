@@ -2,6 +2,15 @@ module SystemUtil where
 
 import Data.List
 import Data.List.Split
+import System.Process
+import System.Exit
+
+copyDir ::  FilePath -> FilePath -> IO Bool
+copyDir src dest = (system $ "cp -r " ++ src ++ " " ++ dest) >>= \exitCode -> return (isSuccess exitCode)
+    where
+        isSuccess :: ExitCode -> Bool
+        isSuccess ExitSuccess = True
+        isSuccess _ = False
 
 parentDir :: FilePath -> FilePath
 parentDir "" = ""

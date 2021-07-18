@@ -42,6 +42,10 @@ substAction (Link target linkName) = do
   subTarget <- envSubst target
   subLinkName <- envSubst linkName
   return (Success (LinkSubst subTarget subLinkName))
+substAction (Copy from to) = do
+  subFrom <- envSubst from
+  subTo <- envSubst to
+  return (Success (CopySubst subFrom subTo))
 substAction (Include target) = do
   subTarget <- envSubst target
   return (Success (IncludeSubst subTarget))

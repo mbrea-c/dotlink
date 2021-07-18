@@ -6,7 +6,7 @@ import Data.List.Split
 import ParserUtil
 import System.Directory
 
-data Action = Link String String | Include String | Epsilon deriving (Show, Eq)
+data Action = Copy String String | Link String String | Include String | Epsilon deriving (Show, Eq)
 
 type Dotlink = [Action]
 
@@ -32,6 +32,14 @@ linkAction = do
   string "\n"
   return (Link target linkName)
 
+copyAction :: Parser Action
+copyAction = do
+  symb "copy"
+  from <- tokenLine stringLit
+  to <- stringLit
+  string "\n"
+  return (Copy from to)
+
 includeAction :: Parser Action
 includeAction = do
   symb "include"
@@ -54,5 +62,5 @@ emptyLine = do
 
 dotlink :: Parser Dotlink
 dotlink = do
-  lst <- many (linkAction +++ includeAction +++ comment +++ emptyLine)
+  lst <- many (copyAction +++ linkAction +++ includeAction +++ comment +++ emptyLine)
   return (filter (/= Epsilon) lst)

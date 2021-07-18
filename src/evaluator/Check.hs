@@ -31,6 +31,11 @@ checkPathName str = do
       return (Just absPath)
     else return Nothing
 
+checkCopyName :: String -> IO (Maybe FilePath)
+checkCopyName str = do
+    absPath <- makeAbsolute str
+    return (Just absPath)
+
 validLinkName :: String -> IO Bool
 validLinkName linkName = do
   pathExists <- doesPathExist linkName
@@ -57,6 +62,15 @@ checkActionExist (LinkSubst target linkName) = do
         (Nothing, _) -> Failure ("Link target does not exist: " ++ target)
         (Just _, Nothing) -> Failure ("Link name is not valid: " ++ linkName)
     )
+checkActionExist (CopySubst from to) = do
+  checkedFrom <- checkPathName from
+  checkedTo <- checkCopyName to
+  return
+    ( case (checkedFrom, checkedTo) of
+        (Just f, Just t) -> Success (CopyChecked f t)
+        (Nothing, _) -> Failure ("Copy source does not exist: " ++ from)
+        (Just _, Nothing) -> Failure ("Copy target is not valid: " ++ to)
+    )
 checkActionExist (IncludeSubst target) = do
   checkedTarget <- checkFileName target
   return
@@ -64,6 +78,17 @@ checkActionExist (IncludeSubst target) = do
         Just t -> Success (IncludeChecked t)
         Nothing -> Failure ("Included file does not exist: " ++ target)
     )
+
+
+validReadablePermissions :: String -> IO Bool
+validReadablePermissions path = do
+    permissions <- getPermissions path
+    return (readable permissions)
+
+validWritablePermissions :: String -> IO Bool
+validWritablePermissions path = do
+    permissions <- getPermissions path
+    return (writable permissions)
 
 validLinkPermissions :: String -> IO Bool
 validLinkPermissions linkName = do
@@ -75,12 +100,19 @@ validIncludePermissions target = do
   permissions <- getPermissions target
   return (readable permissions)
 
+
 checkActionPermissions :: Result ActionEval1 -> IO (Result ActionEval1)
 checkActionPermissions (Success a@(LinkChecked target linkName)) = do
   linkPermissions <- validLinkPermissions linkName
   if linkPermissions
     then return (Success a)
     else return (Failure ("No write permissions in folder: " ++ parentDir linkName))
+checkActionPermissions (Success a@(CopyChecked from to)) = do
+  fromPermissions <- validReadablePermissions from
+  toPermissions <- validLinkPermissions to
+  if (fromPermissions && toPermissions)
+    then return (Success a)
+    else return (Failure ("No write permissions in folder: " ++ parentDir to))
 checkActionPermissions (Success a@(IncludeChecked target)) = do
   permissions <- validIncludePermissions target
   if permissions
